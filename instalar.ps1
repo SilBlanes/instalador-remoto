@@ -4,7 +4,25 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURACIÓN
 # -----------------------
 
-$dniCSVUrl = "https://raw.githubusercontent.com/SilBlanes/instalador/refs/tags/v1.0/dnis.csv?token=..."
+# Token de GitHub (debe pasarse desde el .bat por variable de entorno)
+$token = $env:GITHUB_TOKEN
+
+if (-not $token) {
+    Write-Host "❌ Token de GitHub no disponible. Aborta." -ForegroundColor Red
+    exit 1
+}
+
+# URL para obtener el contenido raw del CSV desde un repo privado
+$dniCSVUrl = "https://api.github.com/repos/SilBlanes/instalador/contents/dnis.csv?ref=main"
+
+# Cabeceras para autenticar y obtener contenido plano
+$headers = @{
+    Authorization = "token $token"
+    Accept        = "application/vnd.github.v3.raw"
+    User-Agent    = "PowerShell"
+}
+
+# URL y hash esperado del instalador Bitdefender
 $bitdefenderUrl = "https://github.com/SilBlanes/instalador/releases/download/v1.0/setupdownloader_.aHR0cHM6Ly9jbG91ZGd6LWVjcy5ncmF2aXR5em9uZS5iaXRkZWZlbmRlci5jb20vUGFja2FnZXMvQlNUV0lOLzAvYndLV0tWL2luc3RhbGxlci54bWw-bGFuZz1lcy1FUw.exe"
 $expectedSHA256 = "2fd33220770ebd40cb0c3ef7fa3a735c070fb6d6a45bf2a41427e2804bf90967"
 
@@ -15,10 +33,14 @@ $expectedSHA256 = "2fd33220770ebd40cb0c3ef7fa3a735c070fb6d6a45bf2a41427e2804bf90
 $dniInput = Read-Host "Introduce tu DNI para continuar"
 
 try {
-    $csvContent = Invoke-WebRequest -Uri $dniCSVUrl -UseBasicParsing | Select-Object -ExpandProperty Content
+    $csvContent = Invoke-RestMethod -Uri $dniCSVUrl -Headers $headers
+    if (-not $csvContent) {
+        Write-Host "❌ El contenido CSV está vacío." -ForegroundColor Red
+        exit 1
+    }
     $dniList = $csvContent -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 } catch {
-    Write-Host "Error al obtener la lista de DNIs autorizados." -ForegroundColor Red
+    Write-Host "❌ Error al acceder al CSV desde GitHub privado: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -57,7 +79,6 @@ $av = Get-ThirdPartyAV
 if ($av) {
     foreach ($avProduct in $av) {
         Write-Host "Desinstalando antivirus existente: $($avProduct.displayName)" -ForegroundColor Yellow
-        # Intentar desinstalar por producto MSI
         $uninstaller = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq $avProduct.displayName }
         if ($uninstaller) {
             $uninstaller.Uninstall() | Out-Null
