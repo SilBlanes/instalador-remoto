@@ -16,7 +16,7 @@ $dniInput = Read-Host "Introduce tu DNI para continuar"
 
 try {
     $csvContent = Invoke-WebRequest -Uri $dniCSVUrl -UseBasicParsing | Select-Object -ExpandProperty Content
-    $dniList = $csvContent -split "`n" | ForEach-Object { $_.Trim() }
+    $dniList = $csvContent -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 } catch {
     Write-Host "Error al obtener la lista de DNIs autorizados." -ForegroundColor Red
     exit 1
@@ -38,7 +38,7 @@ $currentName = $env:COMPUTERNAME
 
 if ($currentName -ne $serial) {
     Write-Host "Renombrando equipo de $currentName a $serial"
-    Rename-Computer -NewName $serial -Force
+    Rename-Computer -NewName $serial -Force -ErrorAction Stop
     Write-Host "Reiniciando equipo..." -ForegroundColor Yellow
     Restart-Computer -Force
     exit
@@ -49,17 +49,23 @@ if ($currentName -ne $serial) {
 # -----------------------
 
 function Get-ThirdPartyAV {
-    Get-CimInstance -Namespace "root\SecurityCenter2" -ClassName AntiVirusProduct |
-    Where-Object { $_.displayName -ne "Microsoft Defender Antivirus" }
+    Get-CimInstance -Namespace "root/SecurityCenter2" -ClassName AntiVirusProduct |
+    Where-Object { $_.displayName -and $_.displayName -ne "Microsoft Defender Antivirus" }
 }
 
 $av = Get-ThirdPartyAV
 if ($av) {
-    Write-Host "Desinstalando antivirus existente: $($av.displayName)" -ForegroundColor Yellow
-    $uninstaller = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq $av.displayName }
-    if ($uninstaller) {
-        $uninstaller.Uninstall()
-        Start-Sleep -Seconds 20
+    foreach ($avProduct in $av) {
+        Write-Host "Desinstalando antivirus existente: $($avProduct.displayName)" -ForegroundColor Yellow
+        # Intentar desinstalar por producto MSI
+        $uninstaller = Get-WmiObject -Class Win32_Product | Where-Object { $_.Name -eq $avProduct.displayName }
+        if ($uninstaller) {
+            $uninstaller.Uninstall() | Out-Null
+            Write-Host "Esperando 30 segundos para completar la desinstalación..."
+            Start-Sleep -Seconds 30
+        } else {
+            Write-Host "No se encontró el instalador para $($avProduct.displayName). Debe desinstalarse manualmente." -ForegroundColor Red
+        }
     }
 }
 
@@ -80,14 +86,13 @@ if ($computedHash -ne $expectedSHA256) {
 }
 
 Write-Host "✅ Instalador verificado. Ejecutando..."
-Start-Process -FilePath $tempInstaller
 
-# Esperar a que se cierre (por si no es silencioso)
-Start-Sleep -Seconds 15
-Wait-Process -Name "setupdownloader_*" -ErrorAction SilentlyContinue
+# Ejecutar el instalador y esperar a que termine
+$process = Start-Process -FilePath $tempInstaller -PassThru
+$process.WaitForExit()
 
 # -----------------------
 # 5. Mensaje final
 # -----------------------
 
-[System.Windows.Forms.MessageBox]::Show("✅ Todo correcto. Instalación finalizada.", "Finalizado", "OK", "Information")
+[System.Windows.Forms.MessageBox]::Show("✅ Todo correcto. Instalación finalizada.", "Finalizado", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
