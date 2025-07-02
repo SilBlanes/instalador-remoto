@@ -30,26 +30,6 @@ $expectedSHA256 = "2fd33220770ebd40cb0c3ef7fa3a735c070fb6d6a45bf2a41427e2804bf90
 # 1. Solicitar DNI
 # -----------------------
 
-$dniInput = Read-Host "Introduce tu DNI para continuar"
-
-try {
-    $csvContent = Invoke-RestMethod -Uri $dniCSVUrl -Headers $headers
-    if (-not $csvContent) {
-        Write-Host "❌ El contenido CSV está vacío." -ForegroundColor Red
-        exit 1
-    }
-    $dniList = $csvContent -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-} catch {
-    Write-Host "❌ Error al acceder al CSV desde GitHub privado: $_" -ForegroundColor Red
-    exit 1
-}
-
-if (-not ($dniList -contains $dniInput)) {
-    Write-Host "❌ DNI NO autorizado. Acceso denegado." -ForegroundColor Red
-    exit 1
-}
-
-Write-Host "✅ DNI autorizado. Iniciando verificación..." -ForegroundColor Green
 
 # -----------------------
 # 2. Comprobar nombre del equipo
