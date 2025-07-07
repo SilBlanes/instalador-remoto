@@ -1,44 +1,32 @@
-# verificar-dni.ps1
+# instalar.ps1
 
-# CONFIGURA ESTOS DATOS ABAJO
-$token     = "ghp_tuTokenPrivadoAQUI"  # 👈 NO RECOMENDADO EN PÚBLICO
-$repo      = "tuusuario/repositorio-privado"
-$branch    = "main"
-$csvPath   = "datos/lista_dnis.csv"
+# URL del CSV con DNIs válidos
+$csvUrl = "https://raw.githubusercontent.com/SilBlanes/instalador-remoto/main/dnis.csv"
+$tempCsv = "$env:TEMP\lista_dnis.csv"
 
-# Ruta GitHub API
-$apiUrl = "https://api.github.com/repos/$repo/contents/$csvPath?ref=$branch"
+Write-Host "🔄 Descargando lista de DNIs válidos..."
 
-# Cabeceras
-$headers = @{
-    Authorization = "Bearer $token"
-    Accept        = "application/vnd.github.v3.raw"
-    "User-Agent"  = "dni-validator"
-}
-
-# Archivo temporal
-$tempFile = "$env:TEMP\lista_dnis.csv"
-
-# Descargar CSV
 try {
-    Invoke-RestMethod -Uri $apiUrl -Headers $headers -OutFile $tempFile
+    Invoke-WebRequest -Uri $csvUrl -OutFile $tempCsv -UseBasicParsing
 } catch {
-    Write-Error "❌ Error al descargar el archivo CSV: $_"
+    Write-Host "❌ Error al descargar el archivo CSV: $_"
     exit 1
 }
 
-# Pedir DNI
-$dni = Read-Host "Introduce tu DNI"
+# Solicitar DNI al usuario
+$dni = Read-Host "🔐 Introduce tu DNI"
 
-# Leer CSV
-$dniList = Get-Content $tempFile | Select-Object -Skip 1 | ForEach-Object { $_.Trim() }
+# Leer lista desde CSV
+$dniList = Import-Csv -Path $tempCsv | ForEach-Object { $_.dni.Trim() }
 
-# Verificar
+# Validar DNI
 if ($dniList -contains $dni) {
-    Write-Host "✅ DNI validado correctamente."
+    Write-Host "`n✅ DNI validado correctamente. Continuando con la instalación..."
+    # Aquí puedes continuar con la lógica de instalación
 } else {
-    Write-Host "❌ DNI no encontrado en la lista."
+    Write-Host "`n❌ DNI no válido. El instalador se cerrará."
+    exit 1
 }
 
-# Limpiar
-Remove-Item $tempFile -Force
+# Limpieza
+Remove-Item $tempCsv -Force
